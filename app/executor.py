@@ -46,6 +46,7 @@ class CodeExecutor:
         例如：
         - 如果整个代码块被缩进了（从编辑器复制粘贴），会移除整体缩进
         - 保留函数、类、循环等结构内部的相对缩进
+        - 修复顶层语句（import, class, def等）的错误缩进
 
         Args:
             code: 原始代码
@@ -112,8 +113,36 @@ class CodeExecutor:
                     cleaned_lines.append('')
             return '\n'.join(cleaned_lines)
         else:
-            # 最小缩进是0，代码已经是标准格式了
-            return code
+            # 最小缩进是0，但可能存在顶层语句有错误缩进的情况
+            # 检测并修复顶层语句（import、class、def、@decorator等）的缩进
+            cleaned_lines = []
+            top_level_patterns = [
+                r'^\s+import\s+',
+                r'^\s+from\s+',
+                r'^\s+class\s+',
+                r'^\s+def\s+',
+                r'^\s+@\w+',
+                r'^\s+async\s+def\s+',
+            ]
+
+            for line in lines:
+                if line.strip():
+                    # 检查是否是有错误缩进的顶层语句
+                    is_top_level = False
+                    for pattern in top_level_patterns:
+                        if re.match(pattern, line):
+                            is_top_level = True
+                            break
+
+                    if is_top_level:
+                        # 移除顶层语句的所有前导空格
+                        cleaned_lines.append(line.lstrip())
+                    else:
+                        cleaned_lines.append(line)
+                else:
+                    cleaned_lines.append(line)
+
+            return '\n'.join(cleaned_lines)
 
     def _prepare_datasets(self, datasets: Dict[str, str], global_vars: Dict[str, Any]) -> None:
         """
@@ -209,13 +238,14 @@ class CodeExecutor:
 
         logger.info(f"已注入 {len(dataset_dataframes)} 个预处理 DataFrame，{len(dataset_contents)} 个原始内容")
 
-    def execute(self, code: str, datasets: Dict[str, str] = None) -> ExecuteResponse:
+    def execute(self, code: str, datasets: Dict[str, str] = None, preloaded_variables: Dict[str, Any] = None) -> ExecuteResponse:
         """
         执行 Python 代码
 
         Args:
             code: 要执行的代码
             datasets: 数据集字典，key为文件名，value为文件内容（可选）
+            preloaded_variables: 预加载的变量字典，key为变量名，value为变量值（可选）
 
         Returns:
             执行结果
@@ -261,6 +291,13 @@ class CodeExecutor:
         # 注入数据集（如果提供）
         if datasets:
             self._prepare_datasets(datasets, global_vars)
+
+        # 注入预加载变量（如果提供）
+        if preloaded_variables:
+            logger.info(f"注入 {len(preloaded_variables)} 个预加载变量")
+            for var_name, var_value in preloaded_variables.items():
+                logger.debug(f"注入变量: {var_name} = {type(var_value).__name__}")
+                global_vars[var_name] = var_value
 
         try:
             # 编译代码
