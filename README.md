@@ -5,11 +5,14 @@
 ## 特性
 
 - ✅ **安全沙箱**：使用 RestrictedPython 限制危险操作
-- ✅ **图表支持**：自动捕获 matplotlib 和 plotly 图表
+- ✅ **丰富的库支持**：支持 NumPy, Pandas, Scikit-learn, Seaborn, SciPy 等数据科学库
+- ✅ **机器学习**：完整的 scikit-learn 支持，包括预处理、模型训练、评估
+- ✅ **图表支持**：自动捕获 matplotlib, plotly, seaborn 图表
 - ✅ **数据表格**：自动识别并渲染 pandas DataFrame
 - ✅ **超时控制**：防止长时间运行的代码占用资源
 - ✅ **并发限制**：控制资源使用
 - ✅ **Docker 部署**：容器化部署，资源隔离
+- ✅ **智能缩进**：自动处理代码缩进问题
 
 ## 快速开始
 
@@ -184,10 +187,22 @@ curl -X POST "http://localhost:8000/validate" \
 
 ### 允许的库
 
-- ✅ numpy
-- ✅ pandas
-- ✅ matplotlib
-- ✅ plotly
+**数据处理**：
+- ✅ numpy - 数值计算
+- ✅ pandas - 数据分析
+- ✅ scipy - 科学计算
+
+**机器学习**：
+- ✅ scikit-learn - 机器学习算法
+  - 数据预处理 (StandardScaler, MinMaxScaler)
+  - 模型训练 (LinearRegression, RandomForest, SVM 等)
+  - 模型评估 (accuracy_score, r2_score, classification_report)
+  - 交叉验证 (train_test_split, cross_val_score)
+
+**数据可视化**：
+- ✅ matplotlib - 基础绘图
+- ✅ plotly - 交互式图表
+- ✅ seaborn - 统计可视化
 
 ### 禁止的操作
 

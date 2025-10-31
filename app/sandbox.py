@@ -10,6 +10,11 @@ import matplotlib.pyplot as plt
 import plotly
 import plotly.graph_objects as go
 import plotly.express as px
+import sklearn
+from sklearn import preprocessing, model_selection, metrics, linear_model, ensemble, tree
+import seaborn as sns
+import scipy
+from scipy import stats
 
 # 配置 matplotlib 使用非交互式后端
 matplotlib.use('Agg')
@@ -29,6 +34,10 @@ class SafeExecutionEnvironment:
         'plotly': plotly,
         'go': go,
         'px': px,
+        'sklearn': sklearn,
+        'seaborn': sns,
+        'sns': sns,
+        'scipy': scipy,
     }
 
     # 禁止的操作和模块
@@ -75,10 +84,13 @@ class SafeExecutionEnvironment:
             'plotly': plotly,
             'plotly.graph_objects': go,
             'plotly.express': px,
+            'sklearn': sklearn,
+            'seaborn': sns,
+            'scipy': scipy,
         }
 
         # 处理允许的库
-        if base_module in ['matplotlib', 'plotly', 'numpy', 'pandas']:
+        if base_module in ['matplotlib', 'plotly', 'numpy', 'pandas', 'sklearn', 'seaborn', 'scipy']:
             # 对于 "import matplotlib.pyplot as plt" 这种情况
             # fromlist 为空，需要返回顶层模块（matplotlib）
             # Python 会自动处理 matplotlib.pyplot 的访问
@@ -88,23 +100,25 @@ class SafeExecutionEnvironment:
                 if base_module in allowed_mapping:
                     return allowed_mapping[base_module]
 
-            # 对于 "from matplotlib import pyplot" 或 "from matplotlib.pyplot import figure"
+            # 对于 "from matplotlib import pyplot" 或 "from sklearn.preprocessing import StandardScaler"
             # fromlist 不为空，需要返回请求的模块
             else:
                 logger.debug(f"Returning module {name} with fromlist {fromlist}")
                 # 如果完整名称在映射中，返回它
                 if name in allowed_mapping:
                     return allowed_mapping[name]
-                # 否则返回基础模块，Python 会从中提取 fromlist
-                if base_module in allowed_mapping:
-                    return allowed_mapping[base_module]
 
-            # 如果上面没有返回，尝试实际导入
+            # 尝试实际导入（支持子模块，如 sklearn.preprocessing）
             try:
-                return __import__(name, globals, locals, fromlist, level)
-            except ImportError:
+                logger.debug(f"Attempting real import of {name}")
+                result = __import__(name, globals, locals, fromlist, level)
+                logger.debug(f"Import successful, returning module")
+                return result
+            except ImportError as e:
+                logger.debug(f"Import failed: {e}")
                 # 如果无法导入，返回基础模块（如果有的话）
                 if base_module in allowed_mapping:
+                    logger.debug(f"Fallback to base module {base_module}")
                     return allowed_mapping[base_module]
                 raise
 
@@ -322,5 +336,187 @@ print("数据概览:")
 print(df)
 print("\\n统计信息:")
 print(df.describe())
+""",
+
+    "sklearn_preprocessing": """from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import numpy as np
+
+# 创建示例数据
+data = pd.DataFrame({
+    'feature1': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'feature2': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+    'target': [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+})
+
+# 分离特征和标签
+X = data[['feature1', 'feature2']]
+y = data['target']
+
+# 数据分割
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42
+)
+
+# 标准化
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+print("原始数据:")
+print(X_train.head())
+print("\\n标准化后:")
+print(pd.DataFrame(X_train_scaled, columns=X.columns).head())
+""",
+
+    "sklearn_linear_regression": """from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 生成示例数据
+np.random.seed(42)
+X = np.random.rand(100, 1) * 10
+y = 2.5 * X + 1.5 + np.random.randn(100, 1) * 2
+
+# 训练模型
+model = LinearRegression()
+model.fit(X, y)
+
+# 预测
+y_pred = model.predict(X)
+
+# 评估
+print(f"系数: {model.coef_[0][0]:.2f}")
+print(f"截距: {model.intercept_[0]:.2f}")
+print(f"R² 分数: {r2_score(y, y_pred):.3f}")
+print(f"均方误差: {mean_squared_error(y, y_pred):.3f}")
+
+# 可视化
+plt.figure(figsize=(10, 6))
+plt.scatter(X, y, alpha=0.5, label='数据点')
+plt.plot(X, y_pred, 'r-', linewidth=2, label='拟合线')
+plt.xlabel('X')
+plt.ylabel('y')
+plt.title('线性回归示例')
+plt.legend()
+plt.grid(True)
+plt.show()
+""",
+
+    "sklearn_classification": """from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+import pandas as pd
+import numpy as np
+
+# 创建分类数据
+np.random.seed(42)
+n_samples = 200
+X = np.random.randn(n_samples, 4)
+y = (X[:, 0] + X[:, 1] > 0).astype(int)
+
+# 分割数据
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42
+)
+
+# 训练随机森林
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+
+# 预测
+y_pred = clf.predict(X_test)
+
+# 评估
+print(f"准确率: {accuracy_score(y_test, y_pred):.3f}")
+print("\\n分类报告:")
+print(classification_report(y_test, y_pred))
+print("\\n特征重要性:")
+for i, importance in enumerate(clf.feature_importances_):
+    print(f"特征 {i}: {importance:.3f}")
+""",
+
+    "seaborn_visualization": """import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# 设置样式
+sns.set_theme(style="whitegrid")
+
+# 创建示例数据
+np.random.seed(42)
+df = pd.DataFrame({
+    'x': np.random.randn(100),
+    'y': np.random.randn(100),
+    'category': np.random.choice(['A', 'B', 'C'], 100),
+    'value': np.random.rand(100) * 100
+})
+
+# 创建多子图
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# 散点图
+sns.scatterplot(data=df, x='x', y='y', hue='category', size='value',
+                ax=axes[0, 0], alpha=0.6)
+axes[0, 0].set_title('散点图')
+
+# 箱线图
+sns.boxplot(data=df, x='category', y='value', ax=axes[0, 1])
+axes[0, 1].set_title('箱线图')
+
+# 小提琴图
+sns.violinplot(data=df, x='category', y='value', ax=axes[1, 0])
+axes[1, 0].set_title('小提琴图')
+
+# 直方图
+sns.histplot(data=df, x='value', hue='category', ax=axes[1, 1], kde=True)
+axes[1, 1].set_title('直方图')
+
+plt.tight_layout()
+plt.show()
+""",
+
+    "scipy_stats": """from scipy import stats
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 生成数据
+np.random.seed(42)
+data1 = np.random.normal(100, 15, 100)
+data2 = np.random.normal(105, 15, 100)
+
+# 描述性统计
+print("数据1统计:")
+print(f"均值: {np.mean(data1):.2f}")
+print(f"标准差: {np.std(data1):.2f}")
+print(f"偏度: {stats.skew(data1):.2f}")
+print(f"峰度: {stats.kurtosis(data1):.2f}")
+
+# t检验
+t_stat, p_value = stats.ttest_ind(data1, data2)
+print(f"\\nt检验结果:")
+print(f"t统计量: {t_stat:.3f}")
+print(f"p值: {p_value:.3f}")
+print(f"结论: {'显著差异' if p_value < 0.05 else '无显著差异'}")
+
+# 正态性检验
+stat, p = stats.normaltest(data1)
+print(f"\\n正态性检验:")
+print(f"p值: {p:.3f}")
+print(f"结论: {'符合正态分布' if p > 0.05 else '不符合正态分布'}")
+
+# 可视化
+plt.figure(figsize=(10, 6))
+plt.hist(data1, bins=20, alpha=0.5, label='数据1', density=True)
+plt.hist(data2, bins=20, alpha=0.5, label='数据2', density=True)
+plt.xlabel('值')
+plt.ylabel('频率')
+plt.title('数据分布对比')
+plt.legend()
+plt.grid(True)
+plt.show()
 """
 }
