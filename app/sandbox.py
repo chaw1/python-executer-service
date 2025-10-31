@@ -56,6 +56,10 @@ class SafeExecutionEnvironment:
         只允许导入白名单中的模块，并返回预先导入的对象
         允许内部依赖的导入，但阻止禁止的模块
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"safe_import called: name={name}, fromlist={fromlist}, level={level}")
+
         base_module = name.split('.')[0]
 
         # 检查是否是禁止的模块
@@ -73,12 +77,36 @@ class SafeExecutionEnvironment:
             'plotly.express': px,
         }
 
-        # 如果是用户代码中导入的允许模块，返回预先导入的对象
-        if name in allowed_mapping:
-            return allowed_mapping[name]
-        elif base_module in allowed_mapping:
-            # 对于子模块，返回基础模块
-            return allowed_mapping[base_module]
+        # 处理允许的库
+        if base_module in ['matplotlib', 'plotly', 'numpy', 'pandas']:
+            # 对于 "import matplotlib.pyplot as plt" 这种情况
+            # fromlist 为空，需要返回顶层模块（matplotlib）
+            # Python 会自动处理 matplotlib.pyplot 的访问
+            if not fromlist:
+                # 没有 fromlist，返回顶层模块
+                logger.debug(f"Returning top-level module for {base_module}")
+                if base_module in allowed_mapping:
+                    return allowed_mapping[base_module]
+
+            # 对于 "from matplotlib import pyplot" 或 "from matplotlib.pyplot import figure"
+            # fromlist 不为空，需要返回请求的模块
+            else:
+                logger.debug(f"Returning module {name} with fromlist {fromlist}")
+                # 如果完整名称在映射中，返回它
+                if name in allowed_mapping:
+                    return allowed_mapping[name]
+                # 否则返回基础模块，Python 会从中提取 fromlist
+                if base_module in allowed_mapping:
+                    return allowed_mapping[base_module]
+
+            # 如果上面没有返回，尝试实际导入
+            try:
+                return __import__(name, globals, locals, fromlist, level)
+            except ImportError:
+                # 如果无法导入，返回基础模块（如果有的话）
+                if base_module in allowed_mapping:
+                    return allowed_mapping[base_module]
+                raise
 
         # 对于其他模块（包括库的内部依赖），允许正常导入
         # 但要确保不是禁止的模块
@@ -172,38 +200,75 @@ class SafeExecutionEnvironment:
         Returns:
             (is_valid, error_message)
         """
-        # 检查禁止的关键字
-        code_lower = code.lower()
-        for forbidden in cls.FORBIDDEN_NAMES:
-            # 更精确的检查，避免误报
-            if f' {forbidden}(' in code_lower or f'\n{forbidden}(' in code_lower or code_lower.startswith(f'{forbidden}('):
-                return False, f"禁止使用: {forbidden}"
+        import re
 
-        # 检查禁止的 import
+        if not code or not code.strip():
+            return False, "代码不能为空"
+
+        # 检查代码长度
+        if len(code) > 100000:  # 100KB
+            return False, "代码过长（最大100KB）"
+
+        # 检查禁止的关键字（使用正则表达式更精确地匹配）
+        for forbidden in cls.FORBIDDEN_NAMES:
+            # 使用正则表达式匹配函数调用，避免误报
+            # 例如：匹配 "open(" 但不匹配 "reopen("
+            pattern = r'\b' + re.escape(forbidden) + r'\s*\('
+            if re.search(pattern, code, re.IGNORECASE):
+                return False, f"检测到禁止的操作: {forbidden}()\n安全策略不允许使用此函数。"
+
+        # 检查禁止的 import（改进的检测）
         lines = code.split('\n')
-        for line in lines:
+        for line_no, line in enumerate(lines, 1):
             line_stripped = line.strip()
+
+            # 跳过注释
+            if line_stripped.startswith('#'):
+                continue
+
+            # 检查 import 语句
             if line_stripped.startswith('import ') or line_stripped.startswith('from '):
-                # 提取模块名
                 if line_stripped.startswith('import '):
-                    parts = line_stripped[7:].split()
-                    if parts:
-                        module = parts[0].split('.')[0].strip(',')
+                    # 处理 import 语句: import os, sys
+                    import_part = line_stripped[7:].split('#')[0].strip()  # 移除注释
+                    modules = [m.strip().split()[0].split('.')[0] for m in import_part.split(',')]
+
+                    for module in modules:
                         if module in cls.FORBIDDEN_IMPORTS:
-                            return False, f"禁止导入模块: {module}"
+                            return False, f"第{line_no}行：禁止导入模块 '{module}'\n安全策略不允许使用此模块。"
+
                 elif line_stripped.startswith('from '):
-                    parts = line_stripped[5:].split()
+                    # 处理 from 语句: from os import path
+                    parts = line_stripped[5:].split('#')[0].strip().split()
                     if parts:
                         module = parts[0].split('.')[0]
                         if module in cls.FORBIDDEN_IMPORTS:
-                            return False, f"禁止导入模块: {module}"
+                            return False, f"第{line_no}行：禁止导入模块 '{module}'\n安全策略不允许使用此模块。"
 
         # 尝试编译
         try:
             compile(code, '<string>', 'exec')
             return True, ""
         except SyntaxError as e:
-            return False, f"语法错误: {str(e)}"
+            # 提供更友好的语法错误信息
+            error_msg = f"语法错误"
+            if e.lineno:
+                error_msg += f"（第{e.lineno}行）"
+            if e.msg:
+                error_msg += f": {e.msg}"
+            if e.text:
+                error_msg += f"\n问题代码: {e.text.strip()}"
+                if e.offset:
+                    error_msg += f"\n{' ' * (e.offset - 1)}^"
+
+            return False, error_msg
+        except IndentationError as e:
+            # 缩进错误
+            error_msg = f"缩进错误"
+            if e.lineno:
+                error_msg += f"（第{e.lineno}行）"
+            error_msg += f": {e.msg}"
+            return False, error_msg
         except Exception as e:
             return False, f"编译错误: {str(e)}"
 
