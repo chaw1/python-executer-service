@@ -115,12 +115,107 @@ class CodeExecutor:
             # 最小缩进是0，代码已经是标准格式了
             return code
 
-    def execute(self, code: str) -> ExecuteResponse:
+    def _prepare_datasets(self, datasets: Dict[str, str], global_vars: Dict[str, Any]) -> None:
+        """
+        准备数据集，将文件内容注入到执行环境
+
+        Args:
+            datasets: 数据集字典，key为文件名，value为文件内容
+            global_vars: 全局变量字典
+        """
+        import logging
+        import pandas as pd
+        import os
+
+        logger = logging.getLogger(__name__)
+
+        if not datasets:
+            return
+
+        logger.info(f"准备注入 {len(datasets)} 个数据集")
+
+        # 存储原始内容和预处理后的DataFrame
+        dataset_contents = {}  # 原始内容
+        dataset_dataframes = {}  # 预处理的DataFrame
+
+        for filename, content in datasets.items():
+            # 存储原始内容
+            dataset_contents[filename] = content
+
+            # 尝试预读取为DataFrame
+            try:
+                if filename.endswith('.csv'):
+                    df = pd.read_csv(io.StringIO(content))
+                    dataset_dataframes[filename] = df
+                    logger.debug(f"成功预读取 {filename} 为 DataFrame: {df.shape}")
+                elif filename.endswith('.json'):
+                    df = pd.read_json(io.StringIO(content))
+                    dataset_dataframes[filename] = df
+                    logger.debug(f"成功预读取 {filename} 为 DataFrame: {df.shape}")
+            except Exception as e:
+                logger.debug(f"无法预读取 {filename}: {e}")
+
+        # 创建自定义的 pd.read_csv 函数，优先从内存读取
+        original_read_csv = pd.read_csv
+        original_read_json = pd.read_json
+
+        def custom_read_csv(filepath_or_buffer, *args, **kwargs):
+            """自定义 read_csv，优先从注入的数据集读取"""
+            # 如果是字符串路径
+            if isinstance(filepath_or_buffer, str):
+                # 移除 {{dataset_path}}/ 前缀
+                clean_path = filepath_or_buffer.replace('{{dataset_path}}/', '').replace('{{dataset_path}}', '')
+                # 获取文件名
+                filename = os.path.basename(clean_path)
+
+                # 优先返回预处理的DataFrame
+                if filename in dataset_dataframes:
+                    logger.debug(f"从内存返回 {filename} 的 DataFrame")
+                    return dataset_dataframes[filename].copy()
+
+                # 如果有原始内容，从StringIO读取
+                if filename in dataset_contents:
+                    logger.debug(f"从 StringIO 读取 {filename}")
+                    return original_read_csv(io.StringIO(dataset_contents[filename]), *args, **kwargs)
+
+            # 否则使用原始函数
+            return original_read_csv(filepath_or_buffer, *args, **kwargs)
+
+        def custom_read_json(filepath_or_buffer, *args, **kwargs):
+            """自定义 read_json，优先从注入的数据集读取"""
+            if isinstance(filepath_or_buffer, str):
+                clean_path = filepath_or_buffer.replace('{{dataset_path}}/', '').replace('{{dataset_path}}', '')
+                filename = os.path.basename(clean_path)
+
+                if filename in dataset_dataframes:
+                    logger.debug(f"从内存返回 {filename} 的 DataFrame")
+                    return dataset_dataframes[filename].copy()
+
+                if filename in dataset_contents:
+                    logger.debug(f"从 StringIO 读取 {filename}")
+                    return original_read_json(io.StringIO(dataset_contents[filename]), *args, **kwargs)
+
+            return original_read_json(filepath_or_buffer, *args, **kwargs)
+
+        # 注入自定义函数和数据
+        global_vars['__datasets_content__'] = dataset_contents
+        global_vars['__datasets_df__'] = dataset_dataframes
+
+        # 获取 pandas 模块并替换读取函数
+        if 'pd' in global_vars:
+            global_vars['pd'].read_csv = custom_read_csv
+            global_vars['pd'].read_json = custom_read_json
+            logger.debug("已覆盖 pd.read_csv 和 pd.read_json")
+
+        logger.info(f"已注入 {len(dataset_dataframes)} 个预处理 DataFrame，{len(dataset_contents)} 个原始内容")
+
+    def execute(self, code: str, datasets: Dict[str, str] = None) -> ExecuteResponse:
         """
         执行 Python 代码
 
         Args:
             code: 要执行的代码
+            datasets: 数据集字典，key为文件名，value为文件内容（可选）
 
         Returns:
             执行结果
@@ -162,6 +257,10 @@ class CodeExecutor:
         # 获取安全的全局环境
         global_vars = self.safe_env.get_safe_globals()
         local_vars = {}
+
+        # 注入数据集（如果提供）
+        if datasets:
+            self._prepare_datasets(datasets, global_vars)
 
         try:
             # 编译代码

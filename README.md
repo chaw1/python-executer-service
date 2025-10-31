@@ -7,6 +7,7 @@
 - ✅ **安全沙箱**：使用 RestrictedPython 限制危险操作
 - ✅ **丰富的库支持**：支持 NumPy, Pandas, Scikit-learn, Seaborn, SciPy 等数据科学库
 - ✅ **机器学习**：完整的 scikit-learn 支持，包括预处理、模型训练、评估
+- ✅ **数据集传递**：通过 API 传递数据文件内容，无需文件系统访问（新功能 🎉）
 - ✅ **图表支持**：自动捕获 matplotlib, plotly, seaborn 图表
 - ✅ **数据表格**：自动识别并渲染 pandas DataFrame
 - ✅ **超时控制**：防止长时间运行的代码占用资源
@@ -169,13 +170,47 @@ plt.show()
 }
 ```
 
-### 3. 获取代码模板
+### 3. 传递数据集（新功能）
+
+**请求**：
+
+```bash
+curl -X POST "http://localhost:8000/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "import pandas as pd\nfrom sklearn.preprocessing import StandardScaler\n\ndf = pd.read_csv(\"data.csv\")\nprint(\"原始数据:\")\nprint(df.describe())\n\nscaler = StandardScaler()\nnumeric_cols = df.select_dtypes(include=[\"number\"]).columns\ndf[numeric_cols] = scaler.fit_transform(df[numeric_cols])\n\nprint(\"\\n标准化后:\")\nprint(df.describe())",
+    "datasets": {
+      "data.csv": "feature1,feature2,feature3\n1,10,100\n2,20,200\n3,30,300\n4,40,400\n5,50,500"
+    }
+  }'
+```
+
+**代码中使用**：
+
+```python
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+# 直接使用文件名，或使用 {{dataset_path}}/文件名
+df = pd.read_csv('data.csv')
+# 或
+df = pd.read_csv('{{dataset_path}}/data.csv')
+
+# 正常进行数据处理
+scaler = StandardScaler()
+numeric_cols = df.select_dtypes(include=['number']).columns
+df_scaled = scaler.fit_transform(df[numeric_cols])
+```
+
+> 详细使用说明请参考 [DATASETS_USAGE.md](DATASETS_USAGE.md)
+
+### 4. 获取代码模板
 
 ```bash
 curl http://localhost:8000/templates
 ```
 
-### 4. 验证代码
+### 5. 验证代码
 
 ```bash
 curl -X POST "http://localhost:8000/validate" \

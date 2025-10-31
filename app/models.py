@@ -10,14 +10,18 @@ class ExecuteRequest(BaseModel):
     code: str = Field(..., description="要执行的Python代码")
     timeout: int = Field(default=30, ge=1, le=60, description="超时时间（秒）")
     output_format: str = Field(default="json", alias="outputFormat", description="输出格式：json 或 html")
+    datasets: Optional[Dict[str, str]] = Field(default=None, description="数据集内容，key为文件名，value为文件内容")
 
     class Config:
         populate_by_name = True  # 允许使用字段名或别名
         json_schema_extra = {
             "example": {
-                "code": "import matplotlib.pyplot as plt\nplt.plot([1,2,3])\nplt.show()",
+                "code": "import pandas as pd\ndf = pd.DataFrame({\"x\": [1,2,3]})\nprint(df)",
                 "timeout": 30,
-                "output_format": "json"
+                "output_format": "json",
+                "datasets": {
+                    "data.csv": "A,B,C\n1,2,3\n4,5,6"
+                }
             }
         }
 

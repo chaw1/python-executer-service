@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Python Executor Service",
     description="安全的 Python 代码执行微服务",
-    version="1.0.0",
+    version="1.2.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -80,7 +80,7 @@ async def root():
     return {
         "service": "Python Executor Service",
         "status": "running",
-        "version": "1.0.0"
+        "version": "1.2.0"
     }
 
 
@@ -89,7 +89,7 @@ async def health_check():
     """健康检查"""
     return HealthResponse(
         status="healthy",
-        version="1.1.0",
+        version="1.2.0",
         available_libraries=[
             "numpy",
             "pandas",
@@ -116,14 +116,15 @@ async def execute_code(request: ExecuteRequest):
     Raises:
         HTTPException: 执行失败时抛出
     """
-    logger.info(f"收到执行请求，代码长度: {len(request.code)} 字符")
+    datasets_info = f", 数据集: {len(request.datasets)}" if request.datasets else ""
+    logger.info(f"收到执行请求，代码长度: {len(request.code)} 字符{datasets_info}")
 
     try:
         # 创建执行器
         executor = CodeExecutor(timeout=request.timeout)
 
-        # 执行代码
-        result = executor.execute(request.code)
+        # 执行代码（传递数据集）
+        result = executor.execute(request.code, datasets=request.datasets)
 
         logger.info(
             f"执行完成 - 状态: {result.status}, "
