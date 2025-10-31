@@ -1,0 +1,170 @@
+"""
+安全沙箱配置
+"""
+import sys
+from RestrictedPython import compile_restricted, safe_globals
+from RestrictedPython.Guards import safe_builtins, guarded_iter_unpack_sequence
+from typing import Dict, Any
+import numpy as np
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+import plotly
+import plotly.graph_objects as go
+import plotly.express as px
+
+# 配置 matplotlib 使用非交互式后端
+matplotlib.use('Agg')
+
+
+class SafeExecutionEnvironment:
+    """安全执行环境"""
+
+    # 允许的库白名单
+    ALLOWED_MODULES = {
+        'numpy': np,
+        'np': np,
+        'pandas': pd,
+        'pd': pd,
+        'matplotlib': matplotlib,
+        'plt': plt,
+        'plotly': plotly,
+        'go': go,
+        'px': px,
+    }
+
+    # 禁止的操作
+    FORBIDDEN_NAMES = [
+        'open', 'file', 'input', 'raw_input',
+        'compile', 'reload', '__import__',
+        'execfile', 'eval', 'exec',
+        'os', 'sys', 'subprocess', 'socket',
+        'urllib', 'requests', 'http',
+    ]
+
+    @classmethod
+    def get_safe_globals(cls) -> Dict[str, Any]:
+        """获取安全的全局命名空间"""
+        safe_dict = {
+            '__builtins__': {
+                # 基础函数
+                'print': print,
+                'len': len,
+                'range': range,
+                'enumerate': enumerate,
+                'zip': zip,
+                'map': map,
+                'filter': filter,
+                'sum': sum,
+                'min': min,
+                'max': max,
+                'abs': abs,
+                'round': round,
+                'sorted': sorted,
+                'reversed': reversed,
+                'list': list,
+                'tuple': tuple,
+                'dict': dict,
+                'set': set,
+                'str': str,
+                'int': int,
+                'float': float,
+                'bool': bool,
+                # 类型检查
+                'type': type,
+                'isinstance': isinstance,
+                'issubclass': issubclass,
+                # 其他安全函数
+                'any': any,
+                'all': all,
+                'ord': ord,
+                'chr': chr,
+                'hex': hex,
+                'oct': oct,
+                'bin': bin,
+                'pow': pow,
+                'divmod': divmod,
+                # 迭代器
+                '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
+                '_getiter_': iter,
+            },
+            # 允许的模块
+            **cls.ALLOWED_MODULES,
+        }
+        return safe_dict
+
+    @classmethod
+    def validate_code(cls, code: str) -> tuple[bool, str]:
+        """
+        验证代码是否安全
+
+        Returns:
+            (is_valid, error_message)
+        """
+        # 检查禁止的关键字
+        code_lower = code.lower()
+        for forbidden in cls.FORBIDDEN_NAMES:
+            if forbidden in code_lower:
+                return False, f"禁止使用: {forbidden}"
+
+        # 尝试编译
+        try:
+            compile_restricted(code, '<string>', 'exec')
+            return True, ""
+        except SyntaxError as e:
+            return False, f"语法错误: {str(e)}"
+        except Exception as e:
+            return False, f"编译错误: {str(e)}"
+
+    @classmethod
+    def compile_code(cls, code: str):
+        """编译受限代码"""
+        return compile_restricted(code, '<string>', 'exec')
+
+
+# 预定义的代码模板
+CODE_TEMPLATES = {
+    "matplotlib_basic": """import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+plt.figure(figsize=(10, 6))
+plt.plot(x, y)
+plt.title('Sine Wave')
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.grid(True)
+plt.show()
+""",
+
+    "plotly_scatter": """import plotly.express as px
+import pandas as pd
+
+df = pd.DataFrame({
+    'x': [1, 2, 3, 4, 5],
+    'y': [2, 4, 1, 5, 3],
+    'category': ['A', 'B', 'A', 'B', 'A']
+})
+
+fig = px.scatter(df, x='x', y='y', color='category', title='Scatter Plot')
+fig.show()
+""",
+
+    "pandas_analysis": """import pandas as pd
+import numpy as np
+
+# 创建示例数据
+df = pd.DataFrame({
+    'Name': ['Alice', 'Bob', 'Charlie', 'David'],
+    'Age': [25, 30, 35, 28],
+    'Score': [85, 92, 78, 88]
+})
+
+print("数据概览:")
+print(df)
+print("\\n统计信息:")
+print(df.describe())
+"""
+}

@@ -1,0 +1,98 @@
+========================================
+Python Executor Service 使用说明
+========================================
+
+一、快速启动
+------------
+1. Windows 用户：双击 start.bat
+2. 跨平台方式：运行 python start.py
+
+启动后访问: http://localhost:8001/docs
+
+
+二、代码编写规则
+----------------
+⚠️ 重要：不需要写 import 语句！
+
+✅ 正确写法：
+-----------
+# 直接使用预导入的库
+df = pd.DataFrame({
+    'Name': ['Alice', 'Bob'],
+    'Age': [25, 30]
+})
+print(df.head())
+print(df.describe())
+
+# NumPy
+arr = np.array([1, 2, 3])
+print(np.sum(arr))
+
+# Matplotlib
+plt.figure()
+plt.plot([1, 2, 3], [4, 5, 6])
+plt.show()
+
+
+❌ 错误写法：
+-----------
+import pandas as pd  # 不需要！
+import numpy as np   # 不需要！
+
+
+三、可用的库
+------------
+- pd / pandas  : Pandas
+- np / numpy   : NumPy
+- plt          : Matplotlib.pyplot
+- go           : Plotly graph_objects
+- px           : Plotly express
+
+
+四、限制说明
+------------
+为了安全，以下操作被禁止：
+- 文件读写（open, pd.read_csv 等）
+- 网络请求（requests, urllib 等）
+- 系统调用（os, sys, subprocess 等）
+
+
+五、示例代码
+------------
+# 数据分析示例
+df = pd.DataFrame({
+    'Name': ['Alice', 'Bob', 'Charlie'],
+    'Age': [25, 30, 35],
+    'Score': [85, 92, 78]
+})
+
+print('数据形状:', df.shape)
+print('\n数据预览:')
+print(df.head())
+print('\n统计摘要:')
+print(df.describe())
+print('\n缺失值:')
+print(df.isnull().sum())
+
+
+六、停止服务
+------------
+在命令行窗口按 Ctrl+C
+
+
+七、常见问题
+------------
+Q: 为什么不能用 import？
+A: 为了安全和性能，所有库已预先导入，直接使用即可。
+
+Q: 如何处理数据文件？
+A: 由于安全限制，不支持文件读取。请在前端传入数据，
+   或使用 pd.DataFrame() 直接创建数据。
+
+Q: 报错 "不允许导入模块" 怎么办？
+A: 删除代码中的 import 语句，直接使用预导入的库。
+
+
+八、联系方式
+------------
+如有问题，请联系：SolarSense Team

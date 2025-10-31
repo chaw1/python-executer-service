@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  python-executor:
+    build: .
+    container_name: python-executor-service
+    ports:
+      - "8000:8000"
+    environment:
+      - MAX_WORKERS=4
+      - TIMEOUT_SECONDS=30
+      - LOG_LEVEL=info
+    volumes:
+      # 只挂载日志目录（只读文件系统除外）
+      - ./logs:/app/logs
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - solarsense-network
+
+networks:
+  solarsense-network:
+    driver: bridge
