@@ -158,8 +158,8 @@ class DataFrameCapture:
                     dataframe_info = {
                         "name": var_name,
                         "html": html,
-                        "shape": var_value.shape,
-                        "columns": var_value.columns.tolist()
+                        "rows": int(var_value.shape[0]),
+                        "columns": int(var_value.shape[1])
                     }
                     dataframes.append(dataframe_info)
 

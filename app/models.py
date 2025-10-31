@@ -35,8 +35,8 @@ class DataFrameOutput(BaseModel):
     """DataFrame输出"""
     name: str = Field(..., description="变量名")
     html: str = Field(..., description="HTML表格")
-    shape: tuple = Field(..., description="形状 (rows, cols)")
-    columns: List[str] = Field(..., description="列名")
+    rows: int = Field(..., description="行数")
+    columns: int = Field(..., description="列数")
 
 
 class ExecutionOutput(BaseModel):
