@@ -89,12 +89,15 @@ async def health_check():
     """健康检查"""
     return HealthResponse(
         status="healthy",
-        version="1.0.0",
+        version="1.1.0",
         available_libraries=[
             "numpy",
             "pandas",
             "matplotlib",
-            "plotly"
+            "plotly",
+            "scikit-learn",
+            "seaborn",
+            "scipy"
         ]
     )
 

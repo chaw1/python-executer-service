@@ -38,6 +38,83 @@ class CodeExecutor:
         self.timeout = timeout
         self.safe_env = SafeExecutionEnvironment()
 
+    def _normalize_code_indentation(self, code: str) -> str:
+        """
+        标准化代码缩进
+
+        这个函数会智能处理代码的整体缩进，同时保留代码内部的相对缩进结构。
+        例如：
+        - 如果整个代码块被缩进了（从编辑器复制粘贴），会移除整体缩进
+        - 保留函数、类、循环等结构内部的相对缩进
+
+        Args:
+            code: 原始代码
+
+        Returns:
+            标准化后的代码
+        """
+        import textwrap
+        import re
+
+        if not code or not code.strip():
+            return code
+
+        lines = code.split('\n')
+
+        # 过滤掉完全空白的行来找最小缩进
+        non_empty_lines = [line for line in lines if line.strip()]
+
+        if not non_empty_lines:
+            return code
+
+        # 检测制表符和空格混用
+        has_tabs = any('\t' in line for line in non_empty_lines)
+        has_spaces = any(line.startswith(' ') and not line.startswith('\t') for line in non_empty_lines)
+
+        # 如果混用了制表符和空格，统一转换为4个空格
+        if has_tabs and has_spaces:
+            code = code.replace('\t', '    ')
+            lines = code.split('\n')
+            non_empty_lines = [line for line in lines if line.strip()]
+        elif has_tabs:
+            # 全是制表符，也转换为空格以便统一处理
+            code = code.replace('\t', '    ')
+            lines = code.split('\n')
+            non_empty_lines = [line for line in lines if line.strip()]
+
+        # 找到所有非空行的前导空格数
+        indents = []
+        for line in non_empty_lines:
+            # 计算前导空格数
+            stripped = line.lstrip(' ')
+            indent = len(line) - len(stripped)
+            indents.append(indent)
+
+        if not indents:
+            return code
+
+        # 找到最小缩进（这是整体的"偏移量"）
+        min_indent = min(indents)
+
+        # 如果最小缩进大于0，说明整个代码块都有统一的偏移，移除这个偏移
+        if min_indent > 0:
+            cleaned_lines = []
+            for line in lines:
+                if line.strip():  # 非空行
+                    # 移除统一的偏移量，保留相对缩进
+                    if len(line) >= min_indent:
+                        cleaned_lines.append(line[min_indent:])
+                    else:
+                        # 防止某些行的缩进小于最小缩进（理论上不应该发生）
+                        cleaned_lines.append(line.lstrip())
+                else:
+                    # 保留空行
+                    cleaned_lines.append('')
+            return '\n'.join(cleaned_lines)
+        else:
+            # 最小缩进是0，代码已经是标准格式了
+            return code
+
     def execute(self, code: str) -> ExecuteResponse:
         """
         执行 Python 代码
@@ -49,60 +126,33 @@ class CodeExecutor:
             执行结果
         """
         import logging
-        import textwrap
-        import re
         logger = logging.getLogger(__name__)
 
         start_time = time.time()
 
-        # 清理代码：智能移除不一致的缩进
-        # 处理混合缩进的情况（比如第一行没缩进，后面行有缩进）
-        lines = code.split('\n')
+        # 标准化代码缩进
+        original_code = code
+        code = self._normalize_code_indentation(code)
 
-        # 找到所有非空行的缩进
-        indents = []
-        for line in lines:
-            if line.strip():  # 非空行
-                # 计算前导空格数
-                stripped = line.lstrip()
-                indent = len(line) - len(stripped)
-                indents.append(indent)
-
-        # 如果有缩进，智能处理
-        if indents:
-            min_indent = min(indents)
-
-            # 如果最小缩进是0（有些行没缩进）但也有缩进的行
-            # 则移除最小的非零缩进
-            if min_indent == 0 and len(set(indents)) > 1:
-                # 找到最小的非零缩进
-                non_zero_indents = [i for i in indents if i > 0]
-                if non_zero_indents:
-                    min_indent = min(non_zero_indents)
-
-            # 移除缩进
-            if min_indent > 0:
-                cleaned_lines = []
-                for line in lines:
-                    if line.strip():  # 非空行
-                        cleaned_lines.append(line[min_indent:] if len(line) >= min_indent else line)
-                    else:  # 空行
-                        cleaned_lines.append('')
-                code = '\n'.join(cleaned_lines)
-        else:
-            # 如果所有行都是空行，使用原代码
-            code = textwrap.dedent(code)
+        # 记录缩进处理
+        if code != original_code:
+            logger.debug("代码缩进已标准化")
+            logger.debug(f"原始代码:\n{original_code}")
+            logger.debug(f"标准化后:\n{code}")
 
         # 验证代码
         is_valid, error_msg = self.safe_env.validate_code(code)
         if not is_valid:
-            logger.error(f"代码验证失败: {error_msg}")
-            logger.error(f"失败的代码:\n{code}")
+            logger.warning(f"代码验证失败: {error_msg}")
+            logger.debug(f"验证失败的代码:\n{code}")
             return ExecuteResponse(
                 status="error",
                 execution_time=0,
-                output=None,
-                error=f"代码验证失败: {error_msg}"
+                output=ExecutionOutput(
+                    stdout="",
+                    stderr=error_msg
+                ),
+                error=error_msg
             )
 
         # 准备执行环境
@@ -114,31 +164,46 @@ class CodeExecutor:
         local_vars = {}
 
         try:
-            # 使用普通compile编译代码
+            # 编译代码
+            logger.debug("正在编译代码...")
             compiled_code = self.safe_env.compile_code(code)
+            logger.debug("代码编译成功")
 
             # 设置超时（仅在 Unix 系统上有效）
             if hasattr(signal, 'SIGALRM'):
                 signal.signal(signal.SIGALRM, timeout_handler)
                 signal.alarm(self.timeout)
+                logger.debug(f"已设置超时: {self.timeout}秒")
 
             # 执行代码并捕获输出
+            logger.debug("开始执行代码...")
+            exec_start = time.time()
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
                 exec(compiled_code, global_vars, local_vars)
+            exec_time = time.time() - exec_start
+            logger.debug(f"代码执行完成，耗时: {exec_time:.3f}秒")
 
             # 取消超时
             if hasattr(signal, 'SIGALRM'):
                 signal.alarm(0)
 
             # 捕获图表
+            logger.debug("正在捕获图表...")
             chart_capture = ChartCapture()
             charts = chart_capture.capture_all(local_vars)
+            if charts:
+                logger.info(f"捕获到 {len(charts)} 个图表")
 
             # 捕获 DataFrames
+            logger.debug("正在捕获 DataFrames...")
             dataframes = DataFrameCapture.capture_dataframes(local_vars)
+            if dataframes:
+                logger.info(f"捕获到 {len(dataframes)} 个 DataFrame")
 
             # 捕获变量信息
             variables = self._extract_variables(local_vars)
+            if variables:
+                logger.debug(f"捕获到 {len(variables)} 个变量")
 
             # 清理
             chart_capture.clear_all()
@@ -148,6 +213,8 @@ class CodeExecutor:
 
             # 获取 stdout 输出
             final_stdout = stdout_capture.getvalue()
+
+            logger.info(f"执行成功 - 总耗时: {execution_time}ms")
 
             return ExecuteResponse(
                 status="success",
@@ -168,6 +235,8 @@ class CodeExecutor:
                 signal.alarm(0)
 
             execution_time = int((time.time() - start_time) * 1000)
+            logger.warning(f"代码执行超时 - 限制: {self.timeout}秒, 已用时: {execution_time}ms")
+
             return ExecuteResponse(
                 status="timeout",
                 execution_time=execution_time,
@@ -186,6 +255,17 @@ class CodeExecutor:
             execution_time = int((time.time() - start_time) * 1000)
             error_traceback = traceback.format_exc()
 
+            # 记录错误
+            logger.error(f"代码执行失败: {str(e)}")
+            logger.debug(f"错误堆栈:\n{error_traceback}")
+
+            # 提供更友好的错误信息
+            error_message = str(e)
+            if "name" in str(e).lower() and "is not defined" in str(e).lower():
+                error_message += "\n提示: 请检查变量名是否拼写正确，或该变量是否已定义。"
+            elif "module" in str(e).lower() and "has no attribute" in str(e).lower():
+                error_message += "\n提示: 请检查模块或对象的方法/属性名是否正确。"
+
             return ExecuteResponse(
                 status="error",
                 execution_time=execution_time,
@@ -193,7 +273,7 @@ class CodeExecutor:
                     stdout=stdout_capture.getvalue(),
                     stderr=stderr_capture.getvalue() + "\n" + error_traceback
                 ),
-                error=str(e)
+                error=error_message
             )
 
         finally:
