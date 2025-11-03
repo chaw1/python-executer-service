@@ -11,6 +11,7 @@ class ExecuteRequest(BaseModel):
     timeout: int = Field(default=30, ge=1, le=60, description="超时时间（秒）")
     output_format: str = Field(default="json", alias="outputFormat", description="输出格式：json 或 html")
     datasets: Optional[Dict[str, str]] = Field(default=None, description="数据集内容，key为文件名，value为文件内容")
+    preloaded_variables: Optional[Dict[str, Any]] = Field(default=None, alias="preloadedVariables", description="预加载的变量，key为变量名，value为变量值")
 
     class Config:
         populate_by_name = True  # 允许使用字段名或别名
@@ -21,6 +22,10 @@ class ExecuteRequest(BaseModel):
                 "output_format": "json",
                 "datasets": {
                     "data.csv": "A,B,C\n1,2,3\n4,5,6"
+                },
+                "preloadedVariables": {
+                    "user_id": 123,
+                    "config": {"debug": True}
                 }
             }
         }

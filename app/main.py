@@ -123,8 +123,12 @@ async def execute_code(request: ExecuteRequest):
         # 创建执行器
         executor = CodeExecutor(timeout=request.timeout)
 
-        # 执行代码（传递数据集）
-        result = executor.execute(request.code, datasets=request.datasets)
+        # 执行代码（传递数据集和预加载变量）
+        result = executor.execute(
+            request.code,
+            datasets=request.datasets,
+            preloaded_variables=request.preloaded_variables
+        )
 
         logger.info(
             f"执行完成 - 状态: {result.status}, "
