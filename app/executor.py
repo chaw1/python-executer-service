@@ -40,10 +40,13 @@ class CodeExecutor:
 
     def _normalize_code_indentation(self, code: str) -> str:
         """
-        标准化代码缩进
+        标准化代码缩进（增强版）
 
-        这个函数会智能处理代码的整体缩进，同时保留代码内部的相对缩进结构。
-        使用 Python 的 textwrap.dedent 来安全地移除公共前导空格。
+        智能处理各种缩进问题，包括：
+        - 统一Tab和空格
+        - 移除公共前导空格
+        - 自动修复不一致的缩进
+        - 智能识别代码块结构
 
         Args:
             code: 原始代码
@@ -60,43 +63,55 @@ class CodeExecutor:
         # 统一处理制表符，转换为4个空格
         code = code.replace('\t', '    ')
 
-        # 使用 dedent 移除公共前导空格
-        # dedent 会自动识别并移除所有行共有的前导空格，同时保持相对缩进
+        # 先用 dedent 移除公共前导空格
         dedented_code = textwrap.dedent(code)
 
-        # 如果 dedent 后的代码与原代码相同，说明没有公共缩进需要移除
-        # 但可能存在个别行有错误缩进的情况
-        if dedented_code == code:
-            # 尝试修复顶层语句的错误缩进
-            lines = code.split('\n')
-            cleaned_lines = []
+        # 进一步智能处理：修复不一致的缩进
+        lines = dedented_code.split('\n')
+        normalized_lines = []
+        indent_stack = [0]  # 缩进栈，用于跟踪缩进层级
 
-            # 顶层语句模式（这些语句在模块级别不应该有缩进）
-            top_level_patterns = [
-                r'^\s+import\s+',
-                r'^\s+from\s+',
-            ]
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
 
-            for line in lines:
-                if line.strip():
-                    # 检查是否是有错误缩进的顶层语句
-                    is_top_level = False
-                    for pattern in top_level_patterns:
-                        if re.match(pattern, line):
-                            is_top_level = True
-                            break
+            # 空行或纯注释行保持原样
+            if not stripped or stripped.startswith('#'):
+                normalized_lines.append(line)
+                continue
 
-                    if is_top_level:
-                        # 移除顶层语句的所有前导空格
-                        cleaned_lines.append(line.lstrip())
-                    else:
-                        cleaned_lines.append(line)
+            # 计算原始缩进
+            original_indent = len(line) - len(stripped)
+
+            # 检查是否是顶层语句（不应该有缩进）
+            is_top_level = any(stripped.startswith(kw) for kw in [
+                'import ', 'from ', 'def ', 'class ', '@'
+            ])
+
+            if is_top_level and i < 3:  # 文件开头的顶层语句
+                current_indent = 0
+                indent_stack = [0]
+            else:
+                # 检查是否是代码块开始（以冒号结尾）
+                if stripped.rstrip().endswith(':'):
+                    current_indent = indent_stack[-1]
+                    # 下一行应该增加缩进
+                    indent_stack.append(current_indent + 4)
                 else:
-                    cleaned_lines.append(line)
+                    # 使用当前缩进栈的最后一个值
+                    current_indent = indent_stack[-1]
 
-            return '\n'.join(cleaned_lines)
+                    # 如果缩进减少了，弹出栈
+                    if original_indent < indent_stack[-1] and len(indent_stack) > 1:
+                        # 找到匹配的缩进层级
+                        while len(indent_stack) > 1 and indent_stack[-1] > original_indent:
+                            indent_stack.pop()
+                        current_indent = indent_stack[-1]
 
-        return dedented_code
+            # 应用标准化的缩进
+            normalized_line = ' ' * current_indent + stripped
+            normalized_lines.append(normalized_line)
+
+        return '\n'.join(normalized_lines)
 
     def _prepare_datasets(self, datasets: Dict[str, str], global_vars: Dict[str, Any]) -> None:
         """
@@ -291,10 +306,16 @@ class CodeExecutor:
 
             # 捕获图表
             logger.debug("正在捕获图表...")
+            import matplotlib.pyplot as plt_check
+            fignums_before = plt_check.get_fignums()
+            logger.info(f"[图表捕获] 执行后的 figure 数量: {len(fignums_before)}, fignums={fignums_before}")
+
             chart_capture = ChartCapture()
             charts = chart_capture.capture_all(local_vars)
+            logger.info(f"[图表捕获] 捕获结果: {len(charts) if charts else 0} 个图表")
             if charts:
-                logger.info(f"捕获到 {len(charts)} 个图表")
+                for i, chart in enumerate(charts):
+                    logger.info(f"[图表捕获] 图表 {i+1}: type={chart.type}, format={chart.format}, data_length={len(chart.data) if chart.data else 0}")
 
             # 捕获 DataFrames
             logger.debug("正在捕获 DataFrames...")
