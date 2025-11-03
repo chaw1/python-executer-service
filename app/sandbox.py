@@ -15,6 +15,15 @@ from sklearn import preprocessing, model_selection, metrics, linear_model, ensem
 import seaborn as sns
 import scipy
 from scipy import stats
+import PIL
+import PIL.Image
+import PIL.ImageEnhance
+import PIL.ImageFilter
+import io
+import base64
+import json
+import re as regex_module
+from collections import Counter
 
 # 配置 matplotlib 使用非交互式后端
 matplotlib.use('Agg')
@@ -38,11 +47,19 @@ class SafeExecutionEnvironment:
         'seaborn': sns,
         'sns': sns,
         'scipy': scipy,
+        'Image': PIL.Image,
+        'ImageEnhance': PIL.ImageEnhance,
+        'ImageFilter': PIL.ImageFilter,
+        'io': io,
+        'base64': base64,
+        'json': json,
+        're': regex_module,
+        'Counter': Counter,
     }
 
     # 禁止的操作和模块
     FORBIDDEN_NAMES = [
-        'open', 'file', 'input', 'raw_input',
+        'file', 'input', 'raw_input',
         'compile', 'reload', '__import__',
         'execfile', 'eval', 'exec',
         'os', 'sys', 'subprocess', 'socket',
@@ -87,10 +104,19 @@ class SafeExecutionEnvironment:
             'sklearn': sklearn,
             'seaborn': sns,
             'scipy': scipy,
+            'PIL': PIL,
+            'PIL.Image': PIL.Image,
+            'PIL.ImageEnhance': PIL.ImageEnhance,
+            'PIL.ImageFilter': PIL.ImageFilter,
+            'io': io,
+            'base64': base64,
+            'json': json,
+            're': regex_module,
+            'collections': Counter,
         }
 
         # 处理允许的库
-        if base_module in ['matplotlib', 'plotly', 'numpy', 'pandas', 'sklearn', 'seaborn', 'scipy']:
+        if base_module in ['matplotlib', 'plotly', 'numpy', 'pandas', 'sklearn', 'seaborn', 'scipy', 'PIL', 'io', 'base64', 'json', 're', 'collections']:
             # 对于 "import matplotlib.pyplot as plt" 这种情况
             # fromlist 为空，需要返回顶层模块（matplotlib）
             # Python 会自动处理 matplotlib.pyplot 的访问
