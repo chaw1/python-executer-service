@@ -24,6 +24,8 @@ import base64
 import json
 import re as regex_module
 from collections import Counter
+import openpyxl
+from openpyxl import Workbook
 
 # 配置 matplotlib 使用非交互式后端
 matplotlib.use('Agg')
@@ -55,6 +57,8 @@ class SafeExecutionEnvironment:
         'json': json,
         're': regex_module,
         'Counter': Counter,
+        'openpyxl': openpyxl,
+        'Workbook': Workbook,
     }
 
     # 禁止的操作和模块
@@ -544,5 +548,315 @@ plt.title('数据分布对比')
 plt.legend()
 plt.grid(True)
 plt.show()
+""",
+
+    "image_format_convert": """from PIL import Image
+import io
+import base64
+
+print("=" * 60)
+print("批量图片格式转换")
+print("=" * 60)
+
+converted_count = 0
+
+for file in selected_files:
+    if file['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif')):
+        try:
+            # 解码图片
+            img_data = base64.b64decode(file['content'])
+            img = Image.open(io.BytesIO(img_data))
+
+            original_format = img.format
+            original_size = len(img_data)
+
+            # 转换为 PNG 格式
+            output = io.BytesIO()
+            if img.mode == 'RGBA':
+                img.save(output, format='PNG')
+            else:
+                # 转换为 RGB 模式后保存为 PNG
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                img.save(output, format='PNG')
+
+            new_size = output.tell()
+            new_name = file['name'].rsplit('.', 1)[0] + '.png'
+
+            print(f"✓ {file['name']}")
+            print(f"  {original_format} -> PNG")
+            print(f"  {original_size/1024:.1f}KB -> {new_size/1024:.1f}KB")
+
+            converted_count += 1
+
+        except Exception as e:
+            print(f"✗ {file['name']}: {e}")
+
+print(f"\\n成功转换 {converted_count} 个文件")
+""",
+
+    "image_compress": """from PIL import Image
+import io
+import base64
+
+print("=" * 60)
+print("批量图片压缩")
+print("=" * 60)
+
+# 配置参数
+MAX_SIZE = (1920, 1080)  # 最大尺寸
+QUALITY = 85              # JPEG 质量
+
+compressed_count = 0
+total_saved = 0
+
+for file in selected_files:
+    if file['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+        try:
+            # 解码图片
+            img_data = base64.b64decode(file['content'])
+            img = Image.open(io.BytesIO(img_data))
+
+            original_size = len(img_data)
+            original_dimension = img.size
+
+            # 调整尺寸（保持宽高比）
+            img.thumbnail(MAX_SIZE, Image.Resampling.LANCZOS)
+
+            # 压缩保存
+            output = io.BytesIO()
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+            img.save(output, format='JPEG', quality=QUALITY, optimize=True)
+
+            new_size = output.tell()
+            saved = original_size - new_size
+            saved_percent = (saved / original_size) * 100
+
+            print(f"✓ {file['name']}")
+            print(f"  尺寸: {original_dimension} -> {img.size}")
+            print(f"  大小: {original_size/1024:.1f}KB -> {new_size/1024:.1f}KB")
+            print(f"  节省: {saved/1024:.1f}KB ({saved_percent:.1f}%)")
+
+            compressed_count += 1
+            total_saved += saved
+
+        except Exception as e:
+            print(f"✗ {file['name']}: {e}")
+
+print(f"\\n成功压缩 {compressed_count} 个文件")
+print(f"总共节省: {total_saved/1024/1024:.2f}MB")
+""",
+
+    "image_analysis": """from PIL import Image
+import io
+import base64
+import numpy as np
+
+print("=" * 60)
+print("图片数据集分析报告")
+print("=" * 60)
+
+image_stats = {
+    'count': 0,
+    'formats': {},
+    'modes': {},
+    'sizes': [],
+    'file_sizes': [],
+}
+
+for file in selected_files:
+    if file['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff')):
+        try:
+            img_data = base64.b64decode(file['content'])
+            img = Image.open(io.BytesIO(img_data))
+
+            # 统计信息
+            image_stats['count'] += 1
+
+            # 格式统计
+            fmt = img.format or 'Unknown'
+            image_stats['formats'][fmt] = image_stats['formats'].get(fmt, 0) + 1
+
+            # 颜色模式统计
+            mode = img.mode
+            image_stats['modes'][mode] = image_stats['modes'].get(mode, 0) + 1
+
+            # 尺寸统计
+            image_stats['sizes'].append(img.size)
+
+            # 文件大小统计
+            image_stats['file_sizes'].append(len(img_data))
+
+        except Exception as e:
+            print(f"警告: 无法分析 {file['name']}: {e}")
+
+if image_stats['count'] > 0:
+    print(f"\\n📊 总图片数: {image_stats['count']}")
+
+    print(f"\\n📁 格式分布:")
+    for fmt, count in sorted(image_stats['formats'].items()):
+        percentage = (count / image_stats['count']) * 100
+        print(f"  {fmt}: {count} ({percentage:.1f}%)")
+
+    print(f"\\n🎨 颜色模式:")
+    for mode, count in sorted(image_stats['modes'].items()):
+        print(f"  {mode}: {count}")
+
+    if image_stats['sizes']:
+        widths = [s[0] for s in image_stats['sizes']]
+        heights = [s[1] for s in image_stats['sizes']]
+
+        print(f"\\n📐 尺寸统计:")
+        print(f"  宽度: 最小={min(widths)}, 最大={max(widths)}, 平均={int(np.mean(widths))}")
+        print(f"  高度: 最小={min(heights)}, 最大={max(heights)}, 平均={int(np.mean(heights))}")
+
+    if image_stats['file_sizes']:
+        sizes_kb = [s/1024 for s in image_stats['file_sizes']]
+        print(f"\\n💾 文件大小:")
+        print(f"  最小: {min(sizes_kb):.1f}KB")
+        print(f"  最大: {max(sizes_kb):.1f}KB")
+        print(f"  平均: {np.mean(sizes_kb):.1f}KB")
+        print(f"  总计: {sum(sizes_kb)/1024:.2f}MB")
+
+else:
+    print("\\n未找到图片文件")
+""",
+
+    "image_enhance": """from PIL import Image, ImageEnhance
+import io
+import base64
+
+print("=" * 60)
+print("批量图片增强处理")
+print("=" * 60)
+
+# 增强参数
+BRIGHTNESS_FACTOR = 1.2   # 亮度增强（1.0 = 原始）
+CONTRAST_FACTOR = 1.1     # 对比度增强
+SHARPNESS_FACTOR = 1.5    # 锐化
+
+enhanced_count = 0
+
+for file in selected_files:
+    if file['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+        try:
+            # 解码图片
+            img_data = base64.b64decode(file['content'])
+            img = Image.open(io.BytesIO(img_data))
+
+            # 1. 亮度增强
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(BRIGHTNESS_FACTOR)
+
+            # 2. 对比度增强
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(CONTRAST_FACTOR)
+
+            # 3. 锐化
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(SHARPNESS_FACTOR)
+
+            print(f"✓ {file['name']}")
+            print(f"  亮度: +{(BRIGHTNESS_FACTOR-1)*100:.0f}%")
+            print(f"  对比度: +{(CONTRAST_FACTOR-1)*100:.0f}%")
+            print(f"  锐化: +{(SHARPNESS_FACTOR-1)*100:.0f}%")
+
+            enhanced_count += 1
+
+        except Exception as e:
+            print(f"✗ {file['name']}: {e}")
+
+print(f"\\n成功增强 {enhanced_count} 个文件")
+""",
+
+    "excel_multi_sheet": """import pandas as pd
+import io
+import base64
+
+print("=" * 60)
+print("Excel 多 Sheet 读取和分析")
+print("=" * 60)
+
+excel_count = 0
+
+for file in selected_files:
+    if file['name'].endswith(('.xlsx', '.xls')):
+        try:
+            # 解码 Excel 文件
+            excel_bytes = base64.b64decode(file['content'])
+
+            # 读取所有 sheet
+            excel_file = pd.ExcelFile(io.BytesIO(excel_bytes))
+
+            print(f"\\n文件: {file['name']}")
+            print(f"Sheet 数量: {len(excel_file.sheet_names)}")
+            print(f"Sheet 列表: {', '.join(excel_file.sheet_names)}")
+
+            # 读取每个 sheet
+            for i, sheet_name in enumerate(excel_file.sheet_names, 1):
+                df = pd.read_excel(excel_file, sheet_name=sheet_name)
+
+                print(f"\\n[{i}] Sheet: {sheet_name}")
+                print(f"    形状: {df.shape}")
+                print(f"    列名: {list(df.columns)}")
+
+                # 显示前几行
+                print(f"    数据预览:")
+                print(df.head(3).to_string(index=False))
+
+                # 基础统计
+                numeric_cols = df.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    print(f"    数值列数量: {len(numeric_cols)}")
+
+            excel_count += 1
+
+        except Exception as e:
+            print(f"\\n✗ {file['name']}: {e}")
+
+if excel_count == 0:
+    print("\\n未找到 Excel 文件")
+else:
+    print(f"\\n成功处理 {excel_count} 个 Excel 文件")
+""",
+
+    "excel_sheet_merge": """import pandas as pd
+import io
+import base64
+
+print("=" * 60)
+print("Excel 多 Sheet 合并")
+print("=" * 60)
+
+for file in selected_files:
+    if file['name'].endswith(('.xlsx', '.xls')):
+        try:
+            excel_bytes = base64.b64decode(file['content'])
+            excel_file = pd.ExcelFile(io.BytesIO(excel_bytes))
+
+            print(f"\\n文件: {file['name']}")
+
+            # 读取所有 sheet 并合并
+            all_dfs = []
+            for sheet_name in excel_file.sheet_names:
+                df = pd.read_excel(excel_file, sheet_name=sheet_name)
+                df['source_sheet'] = sheet_name  # 添加来源标记
+                all_dfs.append(df)
+
+            # 合并
+            merged_df = pd.concat(all_dfs, ignore_index=True)
+
+            print(f"  合并前: {len(excel_file.sheet_names)} 个 sheet")
+            print(f"  合并后: {merged_df.shape}")
+            print(f"\\n合并后的数据预览:")
+            print(merged_df.head(10))
+
+            # 按来源分组统计
+            print(f"\\n按来源分组统计:")
+            print(merged_df.groupby('source_sheet').size())
+
+        except Exception as e:
+            print(f"✗ {file['name']}: {e}")
 """
 }
