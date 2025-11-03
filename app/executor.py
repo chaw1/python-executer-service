@@ -43,10 +43,7 @@ class CodeExecutor:
         标准化代码缩进
 
         这个函数会智能处理代码的整体缩进，同时保留代码内部的相对缩进结构。
-        例如：
-        - 如果整个代码块被缩进了（从编辑器复制粘贴），会移除整体缩进
-        - 保留函数、类、循环等结构内部的相对缩进
-        - 修复顶层语句（import, class, def等）的错误缩进
+        使用 Python 的 textwrap.dedent 来安全地移除公共前导空格。
 
         Args:
             code: 原始代码
@@ -60,69 +57,24 @@ class CodeExecutor:
         if not code or not code.strip():
             return code
 
-        lines = code.split('\n')
+        # 统一处理制表符，转换为4个空格
+        code = code.replace('\t', '    ')
 
-        # 过滤掉完全空白的行来找最小缩进
-        non_empty_lines = [line for line in lines if line.strip()]
+        # 使用 dedent 移除公共前导空格
+        # dedent 会自动识别并移除所有行共有的前导空格，同时保持相对缩进
+        dedented_code = textwrap.dedent(code)
 
-        if not non_empty_lines:
-            return code
-
-        # 检测制表符和空格混用
-        has_tabs = any('\t' in line for line in non_empty_lines)
-        has_spaces = any(line.startswith(' ') and not line.startswith('\t') for line in non_empty_lines)
-
-        # 如果混用了制表符和空格，统一转换为4个空格
-        if has_tabs and has_spaces:
-            code = code.replace('\t', '    ')
+        # 如果 dedent 后的代码与原代码相同，说明没有公共缩进需要移除
+        # 但可能存在个别行有错误缩进的情况
+        if dedented_code == code:
+            # 尝试修复顶层语句的错误缩进
             lines = code.split('\n')
-            non_empty_lines = [line for line in lines if line.strip()]
-        elif has_tabs:
-            # 全是制表符，也转换为空格以便统一处理
-            code = code.replace('\t', '    ')
-            lines = code.split('\n')
-            non_empty_lines = [line for line in lines if line.strip()]
-
-        # 找到所有非空行的前导空格数
-        indents = []
-        for line in non_empty_lines:
-            # 计算前导空格数
-            stripped = line.lstrip(' ')
-            indent = len(line) - len(stripped)
-            indents.append(indent)
-
-        if not indents:
-            return code
-
-        # 找到最小缩进（这是整体的"偏移量"）
-        min_indent = min(indents)
-
-        # 如果最小缩进大于0，说明整个代码块都有统一的偏移，移除这个偏移
-        if min_indent > 0:
             cleaned_lines = []
-            for line in lines:
-                if line.strip():  # 非空行
-                    # 移除统一的偏移量，保留相对缩进
-                    if len(line) >= min_indent:
-                        cleaned_lines.append(line[min_indent:])
-                    else:
-                        # 防止某些行的缩进小于最小缩进（理论上不应该发生）
-                        cleaned_lines.append(line.lstrip())
-                else:
-                    # 保留空行
-                    cleaned_lines.append('')
-            return '\n'.join(cleaned_lines)
-        else:
-            # 最小缩进是0，但可能存在顶层语句有错误缩进的情况
-            # 检测并修复顶层语句（import、class、def、@decorator等）的缩进
-            cleaned_lines = []
+
+            # 顶层语句模式（这些语句在模块级别不应该有缩进）
             top_level_patterns = [
                 r'^\s+import\s+',
                 r'^\s+from\s+',
-                r'^\s+class\s+',
-                r'^\s+def\s+',
-                r'^\s+@\w+',
-                r'^\s+async\s+def\s+',
             ]
 
             for line in lines:
@@ -143,6 +95,8 @@ class CodeExecutor:
                     cleaned_lines.append(line)
 
             return '\n'.join(cleaned_lines)
+
+        return dedented_code
 
     def _prepare_datasets(self, datasets: Dict[str, str], global_vars: Dict[str, Any]) -> None:
         """
@@ -229,6 +183,18 @@ class CodeExecutor:
         # 注入自定义函数和数据
         global_vars['__datasets_content__'] = dataset_contents
         global_vars['__datasets_df__'] = dataset_dataframes
+
+        # 创建 selected_files 变量（用户可以直接使用）
+        selected_files = []
+        for filename, content in dataset_contents.items():
+            selected_files.append({
+                'name': filename,
+                'path': filename,  # 目前使用文件名作为路径
+                'content': content
+            })
+
+        global_vars['selected_files'] = selected_files
+        logger.info(f"已创建 selected_files 变量，包含 {len(selected_files)} 个文件")
 
         # 获取 pandas 模块并替换读取函数
         if 'pd' in global_vars:
